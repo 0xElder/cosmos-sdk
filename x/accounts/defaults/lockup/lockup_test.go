@@ -2,6 +2,9 @@ package lockup
 
 import (
 	"context"
+	"cosmossdk.io/core/header"
+	"cosmossdk.io/log"
+	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
 
@@ -275,5 +278,63 @@ func TestQueryLockupAccountBaseInfo(t *testing.T) {
 	res, err := baseLockup.QueryLockupAccountBaseInfo(ctx, &lockuptypes.QueryLockupAccountInfoRequest{})
 	require.Equal(t, res.OriginalLocking.AmountOf("test"), math.NewInt(10))
 	require.Equal(t, res.Owner, "owner")
+	require.NoError(t, err)
+
+}
+
+func TestWithdrawUnlockedCoins(t *testing.T) {
+	const (
+		liquid         = 6
+		locked         = 4
+		initialBalance = liquid + locked // note: 10 is setup in the bank mock
+		staked         = 7
+		unstaked       = staked
+		denom          = "test"
+	)
+	ctx, ss := newMockContext(t)
+	now := time.Now()
+	sdkCtx := sdk.NewContext(nil, true, log.NewNopLogger()).WithContext(ctx).WithHeaderInfo(header.Info{
+		Time: now,
+	})
+
+	baseLockup := setup(t, ctx, ss)
+	require.NoError(t, baseLockup.OriginalLocking.Set(ctx, denom, math.NewInt(locked)))
+
+	lockedCoinsFunc := func(ctx context.Context, time time.Time, denoms ...string) (sdk.Coins, error) {
+		return sdk.NewCoins(sdk.NewCoin(denom, math.NewInt(locked))), nil
+	}
+
+	// delegate
+	_, err := baseLockup.Delegate(sdkCtx, &lockuptypes.MsgDelegate{
+		Sender:           "owner",
+		ValidatorAddress: "validator",
+		Amount:           sdk.NewCoin(denom, math.NewInt(staked)),
+	}, lockedCoinsFunc)
+	require.NoError(t, err)
+	// balance should be 10 - 5 = 5
+
+	_, err = baseLockup.Undelegate(sdkCtx, &lockuptypes.MsgUndelegate{
+		Sender:           "owner",
+		ValidatorAddress: "validator",
+		Amount:           sdk.NewCoin(denom, math.NewInt(unstaked)),
+	})
+	require.NoError(t, err)
+	// when unboding time has expired
+	// balance should be 5 + 5 = 10 now
+
+	_, err = baseLockup.UnbondEntries.Get(sdkCtx, 0)
+	require.NoError(t, err)
+	amount, err := baseLockup.DelegatedLocking.Get(sdkCtx, denom)
+	require.NoError(t, err)
+	assert.Equal(t, amount, math.NewInt(unstaked))
+
+	// when WithdrawUnlockedCoins is called,
+	// only the liquid amount should be returned
+	res, err := baseLockup.WithdrawUnlockedCoins(sdkCtx, &lockuptypes.MsgWithdraw{
+		Withdrawer: "owner",
+		ToAddress:  "my-receiver",
+		Denoms:     []string{denom},
+	}, lockedCoinsFunc)
+	require.Equal(t, math.NewInt(initialBalance-locked).String(), res.AmountReceived.AmountOf(denom).String())
 	require.NoError(t, err)
 }
