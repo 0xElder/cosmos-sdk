@@ -175,7 +175,7 @@ replace (
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 
 	// replace cometbft to point to the elder fork cometBFT
-	github.com/cometbft/cometbft => github.com/0xElder/cometbft v0.38.13-0.20241123130225-1cfd140ea543
+	github.com/cometbft/cometbft => github.com/0xElder/cometbft v0.38.13-0.20241123131143-624cf84d9114
 	// dgrijalva/jwt-go is deprecated and doesn't receive security updates.
 	// TODO: remove it: https://github.com/cosmos/cosmos-sdk/issues/13134
 	github.com/dgrijalva/jwt-go => github.com/golang-jwt/jwt/v4 v4.4.2
